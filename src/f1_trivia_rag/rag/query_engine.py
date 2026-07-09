@@ -2,19 +2,19 @@ import chromadb
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.base.base_query_engine import BaseQueryEngine
 from llama_index.core.query_engine import CitationQueryEngine
-from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.llms.openai import OpenAI
+from llama_index.embeddings.gemini import GeminiEmbedding
+from llama_index.llms.gemini import Gemini
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from f1_trivia_rag.config import settings
 
 
 def _configure_llama_index() -> None:
-    Settings.embed_model = OpenAIEmbedding(
-        model=settings.openai_embed_model,
-        api_key=settings.openai_api_key,
+    Settings.embed_model = GeminiEmbedding(
+        model_name=settings.gemini_embed_model,
+        api_key=settings.gemini_api_key,
     )
-    Settings.llm = OpenAI(model=settings.openai_chat_model, api_key=settings.openai_api_key)
+    Settings.llm = Gemini(model_name=settings.gemini_chat_model, api_key=settings.gemini_api_key)
 
 
 def load_query_engine() -> BaseQueryEngine:

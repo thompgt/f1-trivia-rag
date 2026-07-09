@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Runs the full test suite (unit + live end-to-end) before allowing a commit.
+# Installed via: git config core.hooksPath .githooks
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+PYTHON_BIN=".venv/Scripts/python"
+[ -x "$PYTHON_BIN" ] || PYTHON_BIN=".venv/bin/python"
+
+if [ ! -x "$PYTHON_BIN" ]; then
+    echo "pre-commit: no .venv found. Create one with:" >&2
+    echo "  python -m venv .venv && .venv/Scripts/pip install -e \".[dev]\"" >&2
+    exit 1
+fi
+
+echo "pre-commit: running unit + end-to-end tests..."
+if ! "$PYTHON_BIN" -m pytest -q; then
+    echo "pre-commit: tests failed - commit aborted." >&2
+    exit 1
+fi
+
+echo "pre-commit: all tests passed."

@@ -8,9 +8,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    openai_api_key: str = ""
-    openai_embed_model: str = "text-embedding-3-small"
-    openai_chat_model: str = "gpt-4o-mini"
+    gemini_api_key: str = ""
+    gemini_embed_model: str = "models/gemini-embedding-001"
+    gemini_chat_model: str = "gemini-2.5-flash"
 
     chroma_persist_dir: Path = PROJECT_ROOT / "storage" / "chroma"
     chroma_collection: str = "f1_trivia"

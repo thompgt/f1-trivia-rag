@@ -1,6 +1,6 @@
 import chromadb
 from llama_index.core import Document, StorageContext, VectorStoreIndex, Settings
-from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from f1_trivia_rag.config import settings
@@ -8,9 +8,9 @@ from f1_trivia_rag.ingestion.common import RawDocument
 
 
 def _configure_llama_index() -> None:
-    Settings.embed_model = OpenAIEmbedding(
-        model=settings.openai_embed_model,
-        api_key=settings.openai_api_key,
+    Settings.embed_model = GeminiEmbedding(
+        model_name=settings.gemini_embed_model,
+        api_key=settings.gemini_api_key,
     )
 
 

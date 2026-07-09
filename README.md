@@ -15,6 +15,11 @@ responses cite where the number came from instead of hallucinating it.
 - **Wikipedia** — race report prose (narrative context Ergast doesn't have).
 - **FastF1** (optional) — session-level telemetry facts for more recent seasons.
 
+## Model provider
+
+Embeddings and chat generation use Google Gemini (`gemini-2.5-flash` +
+`models/gemini-embedding-001`) via `llama-index-llms-gemini` / `llama-index-embeddings-gemini`.
+
 ## Project layout
 
 ```
@@ -43,7 +48,7 @@ storage/                 persisted Chroma index (gitignored)
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -e ".[dev]"
-cp .env.example .env  # then fill in OPENAI_API_KEY
+cp .env.example .env  # then fill in GEMINI_API_KEY
 ```
 
 ## Usage
