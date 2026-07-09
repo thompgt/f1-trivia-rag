@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+.env
+
+# Vector store + ingestion cache
+storage/*
+!storage/.gitkeep
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# FastF1 cache
+.fastf1_cache/
+
+.pytest_cache/
+.DS_Store

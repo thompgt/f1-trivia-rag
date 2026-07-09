@@ -1,0 +1,29 @@
+[project]
+name = "f1-trivia-rag"
+version = "0.1.0"
+description = "RAG chatbot for Formula 1 historical stats and trivia"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic-settings>=2.4",
+    "llama-index>=0.11",
+    "llama-index-vector-stores-chroma>=0.2",
+    "chromadb>=0.5",
+    "requests>=2.32",
+    "wikipedia>=1.4",
+    "fastf1>=3.4",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
