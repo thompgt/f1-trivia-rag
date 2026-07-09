@@ -22,6 +22,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "ipykernel>=6.29",
+    "jupyter>=1.0",
 ]
 
 [build-system]
