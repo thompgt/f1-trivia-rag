@@ -3,6 +3,15 @@
 A retrieval-augmented chatbot that answers Formula 1 historical stats and trivia questions,
 grounded in Ergast race-result data and Wikipedia race reports (with citations back to source).
 
+## Tech Stack
+
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![LlamaIndex](https://img.shields.io/badge/LlamaIndex-1B1B1D?style=for-the-badge)
+![Chroma](https://img.shields.io/badge/Chroma-FF6B6B?style=for-the-badge)
+![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white)
+![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white)
+
 ## Why RAG
 
 LLMs are unreliable at precise sports statistics from memory alone. This project retrieves
