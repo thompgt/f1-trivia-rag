@@ -50,9 +50,10 @@ keep it fixed.
 - **Metadata modelling for retrieval** — a source-agnostic `RawDocument` dataclass carrying
   `source`, `source_id`, and per-source metadata (season, round, race name), which is what makes
   both filtering and citation possible.
-- **Data ingestion from third-party APIs** — paginated/rate-limited REST calls against the
-  Ergast successor API, Wikipedia page fetching with disambiguation handling, and FastF1 session
-  loading with an on-disk cache.
+- **Data ingestion from third-party APIs** — paginated, rate-limited REST calls against the
+  Ergast successor API with exponential backoff (honouring `Retry-After`) and a per-season
+  on-disk JSON cache so a failed multi-season ingest resumes instead of restarting; Wikipedia
+  page fetching with disambiguation handling; FastF1 session loading with an on-disk cache.
 - **API design with FastAPI + Pydantic** — typed request/response models, lazily initialized
   query engine, `503` when no index has been built yet, health endpoint.
 - **Configuration management** — `pydantic-settings` with `.env` loading for API keys, model
@@ -115,13 +116,14 @@ notebooks/
 tests/
   test_config.py            Settings defaults
   test_ergast_ingestion.py  Ergast payload -> RawDocument transform (no network)
+  test_ergast_client.py     Pagination, retry/backoff, and the on-disk cache (stubbed HTTP)
   test_abstention.py        Empty-retrieval guard + grounding prompt contents (no network)
   test_build_index.py       Collection reset + document metadata promotion (no network)
   test_raw_document.py      The season-metadata-is-a-string invariant (no network)
   test_season_aware_retriever.py  Stub-index tests: filter key/value/type and top_k (no network)
   test_e2e.py               Live index build, query engine, and /chat endpoint
   test_chatbot_scenarios.py 15 live scenario tests (aggregation, negation, refusal, citations)
-data/                       raw/ and processed/ ingestion output + FastF1 cache (gitignored)
+data/                       raw/ (Ergast JSON cache, FastF1 cache) and processed/ (gitignored)
 storage/chroma/             persisted Chroma collection (gitignored)
 ```
 
@@ -150,7 +152,16 @@ flowchart LR
 fetches the season schedule from `https://api.jolpi.ca/ergast/f1` (the community-run successor to
 the retired ergast.com API), then requests each round's results individually — the API has no
 single endpoint returning per-driver detail for a whole season — with a small delay between
-requests to stay inside the public rate limits. Each race becomes one `RawDocument`: a header line
+requests to stay inside the public rate limits.
+
+Every call follows `offset`/`total` to the end of the collection rather than accepting the API's
+30-row default page, which would otherwise truncate a large grid mid-classification. Transient
+failures (429, 5xx, connection errors) retry with exponential backoff and honour `Retry-After`;
+a 404 does not retry. Each season's schedule and each round's results are cached as JSON under
+`data/raw/ergast/<season>/`, so an ingest that dies on round 14 of 2023 resumes from disk instead
+of re-requesting everything — pass `refresh=True` to bypass the cache.
+
+Each race becomes one `RawDocument`: a header line
 (race name, season, circuit, date) followed by one line per classified driver
 (`P1: Max Verstappen (Red Bull) - Finished`), tagged with `source="ergast"`,
 `source_id="{season}-{round}-result"`, and metadata `{season, round, race_name}`.
