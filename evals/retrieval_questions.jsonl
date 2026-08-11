@@ -1,0 +1,28 @@
+# Labelled retrieval set. One JSON object per line; blank lines and #-comments ignored.
+#
+# Labels are Ergast source_ids ("{season}-{round}-result"), which survive re-ingestion
+# and re-chunking. Run against an index built with:
+#   python scripts/ingest.py --seasons 2022 2023 --skip-wikipedia
+#   python scripts/eval_retrieval.py
+#
+# "full_season" means the whole season is the evidence: partial retrieval produces a
+# wrong count, not a vaguer answer. It is resolved against the live collection, so it
+# stays correct as the corpus changes.
+#
+# --- single-fact lookups: one document holds the answer -----------------------------
+{"id": "lookup-2023-r01", "question": "Who won the first Grand Prix of the 2023 season?", "relevant_source_ids": ["2023-1-result"]}
+{"id": "lookup-2023-r08", "question": "Who finished on the podium at round 8 of 2023?", "relevant_source_ids": ["2023-8-result"]}
+{"id": "lookup-2023-r22", "question": "Who won the final race of the 2023 season?", "relevant_source_ids": ["2023-22-result"]}
+{"id": "lookup-2022-r01", "question": "Who won the opening race of the 2022 season?", "relevant_source_ids": ["2022-1-result"]}
+{"id": "lookup-2022-r12", "question": "Who retired at round 12 of the 2022 season?", "relevant_source_ids": ["2022-12-result"]}
+
+# --- two-document comparisons -------------------------------------------------------
+{"id": "compare-2022-2023-openers", "question": "Compare the winner of the 2022 opener with the winner of the 2023 opener.", "relevant_source_ids": ["2022-1-result", "2023-1-result"], "note": "Regression: the first-match-wins season regex retrieved only 2022 here."}
+{"id": "compare-2023-r01-r02", "question": "Did the same driver win rounds 1 and 2 of 2023?", "relevant_source_ids": ["2023-1-result", "2023-2-result"]}
+
+# --- whole-season aggregates: every race is evidence --------------------------------
+{"id": "aggregate-2023-redbull-wins", "question": "How many races did Red Bull win in 2023?", "full_season": "2023", "note": "The failure mode the whole project exists to fix."}
+{"id": "aggregate-2023-winners", "question": "List every different race winner of the 2023 season.", "full_season": "2023"}
+{"id": "aggregate-2023-negation", "question": "In the 2023 season, which races did Red Bull NOT win?", "full_season": "2023", "note": "Complement sets need full coverage or the answer is silently short."}
+{"id": "aggregate-2022-ferrari-wins", "question": "How many races did Ferrari win in 2022?", "full_season": "2022"}
+{"id": "aggregate-2022-podiums", "question": "How many podium finishes did Mercedes take in 2022?", "full_season": "2022"}

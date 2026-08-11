@@ -66,9 +66,12 @@ keep it fixed.
 - **Notebook-based experimentation** — `notebooks/rag_experiment.ipynb` runs one real season
   through ingest → index → query and inspects answers alongside their citations.
 
-Not present: no reranking stage, and no offline eval harness or scored benchmark. Chunking is
-pinned (a `SentenceSplitter` at 1024/20 configured in `build_index.py`) rather than left to the
-library default, but it is not tuned per source.
+- **Offline retrieval evaluation** — a labelled question→`source_id` set and a hit-rate /
+  recall / MRR harness (`scripts/eval_retrieval.py`), so a chunking or `top_k` change produces a
+  number instead of a hunch.
+
+Not present: no reranking stage. Chunking is pinned (a `SentenceSplitter` at 1024/20 configured in
+`build_index.py`) rather than left to the library default, but it is not tuned per source.
 
 ## Architecture
 
@@ -111,8 +114,13 @@ src/f1_trivia_rag/
     query_engine.py         Loads the persisted index; SeasonAwareRetriever + CitationQueryEngine
   api/
     main.py                 FastAPI app: POST /chat, GET /health
+  eval/
+    retrieval.py            Hit-rate / recall / MRR metrics over labelled source_ids
 scripts/
-  ingest.py                 CLI: fetch seasons from Ergast and (re)build the index
+  ingest.py                 CLI: fetch seasons from Ergast and rebuild the index
+  eval_retrieval.py         CLI: score retrieval against the labelled set
+evals/
+  retrieval_questions.jsonl Labelled question -> source_id set (lookups + aggregates)
 notebooks/
   rag_experiment.ipynb      Single-season ingest -> index -> query walkthrough
 tests/
@@ -121,6 +129,7 @@ tests/
   test_ergast_client.py     Pagination, retry/backoff, and the on-disk cache (stubbed HTTP)
   test_ingestion_pipeline.py Corpus assembly + --skip-wikipedia, all sources stubbed
   test_fastf1_source.py     FastF1 unavailable-vs-broken error handling (stubbed)
+  test_eval_retrieval.py    Eval metrics + the committed question set (no network)
   test_abstention.py        Empty-retrieval guard + grounding prompt contents (no network)
   test_api.py               /chat status mapping and input bounds (stubbed engine)
   test_build_index.py       Collection reset + document metadata promotion (no network)
@@ -343,6 +352,35 @@ to, the metadata filter's key/value/type, the `top_k` derived from the store, th
 reset, and the abstention guard — all with stub indexes, so `SeasonAwareRetriever` is verified
 without an API key. GitHub Actions (`.github/workflows/ci.yml`) installs `requirements.lock` and
 runs `ruff check .` plus `pytest -m "not live"` on Python 3.11 and 3.13.
+
+### Evaluate retrieval
+
+```bash
+python scripts/ingest.py --seasons 2022 2023 --skip-wikipedia
+python scripts/eval_retrieval.py
+```
+
+```
+corpus         44 nodes in 'f1_trivia'
+questions      12
+hit rate@400   1.000
+recall@400     1.000
+MRR            1.000
+```
+
+Retrieval only — no generation, so this costs query embeddings rather than chat tokens. It scores
+the layer that degrades silently: a chunking change, a different `MAX_SEASON_TOP_K`, or a new
+embedding model can all make answers worse while every assertion on generated text still passes.
+
+- **hit rate@k** — at least one relevant document retrieved. The floor for a grounded answer.
+- **recall@k** — the share of each question's relevant documents retrieved. This is the aggregate
+  metric: retrieving 5 of 22 races still "hits", and still produces a wrong count.
+- **MRR** — how highly the first relevant document ranked; what a reranker would move.
+
+Labels are `source_id`s, so they survive re-ingestion and re-chunking. Aggregate questions are
+labelled `full_season` and resolved against the live collection, so they stay correct as the
+corpus grows. Questions with incomplete retrieval are listed with what was missing, and the
+script exits non-zero if any recall is below 1.0.
 
 ### Notebook
 
