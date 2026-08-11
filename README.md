@@ -54,8 +54,9 @@ keep it fixed.
   Ergast successor API with exponential backoff (honouring `Retry-After`) and a per-season
   on-disk JSON cache so a failed multi-season ingest resumes instead of restarting; Wikipedia
   page fetching with disambiguation handling; FastF1 session loading with an on-disk cache.
-- **API design with FastAPI + Pydantic** — typed request/response models, lazily initialized
-  query engine, `503` when no index has been built yet, health endpoint.
+- **API design with FastAPI + Pydantic** — typed request/response models with a bounded message
+  length, lazily initialized query engine, `503` when no index has been built yet, upstream model
+  failures mapped to `502`/`504` rather than surfacing as this service's `500`, health endpoint.
 - **Configuration management** — `pydantic-settings` with `.env` loading for API keys, model
   names, and storage paths.
 - **Testing an LLM system** — unit tests for pure transforms, plus `live`-marked end-to-end tests
@@ -120,6 +121,7 @@ tests/
   test_ergast_client.py     Pagination, retry/backoff, and the on-disk cache (stubbed HTTP)
   test_ingestion_pipeline.py Corpus assembly + --skip-wikipedia, all sources stubbed
   test_abstention.py        Empty-retrieval guard + grounding prompt contents (no network)
+  test_api.py               /chat status mapping and input bounds (stubbed engine)
   test_build_index.py       Collection reset + document metadata promotion (no network)
   test_raw_document.py      The season-metadata-is-a-string invariant (no network)
   test_season_aware_retriever.py  Stub-index tests: filter key/value/type and top_k (no network)
@@ -308,8 +310,19 @@ curl -X POST http://localhost:8000/chat \
 ```
 
 The response is `{"answer": "...", "citations": [{"source": "ergast", "source_id": "2023-1-result"}, ...]}`.
-`GET /health` returns `{"status": "ok"}`. If no index has been built yet, `/chat` returns `503`
-with a message pointing at `scripts/ingest.py`.
+`GET /health` returns `{"status": "ok"}`.
+
+| Condition | Status |
+| --- | --- |
+| Empty message, or longer than 2000 characters | `422` (rejected before any model call) |
+| No index built yet — store missing *or* collection empty | `503`, pointing at `scripts/ingest.py` |
+| `GEMINI_API_KEY` not configured | `503` |
+| Gemini rate-limited, timed out, or 5xx'd | `504` |
+| Any other upstream Gemini error | `502` |
+
+Readiness is `collection.count() > 0`, not directory existence: `storage/chroma` ships as a
+`.gitkeep` placeholder and Chroma will happily open an empty collection, so a fresh clone used to
+pass the check and then answer every question from nothing.
 
 ### Tests
 

@@ -53,6 +53,10 @@ OPEN_RANGE_PATTERN = re.compile(
 # Returned without calling the LLM when retrieval finds nothing - typically a question
 # about a season that was never ingested. LlamaIndex's own empty-node path returns the
 # opaque string "Empty Response"; this says what actually happened.
+class IndexUnavailableError(RuntimeError):
+    """No usable index: the store is missing, or the collection exists but is empty."""
+
+
 NO_SOURCES_ANSWER = (
     "I could not find anything about that in the indexed sources, so I cannot answer it. "
     "The index only covers the seasons that have been ingested - run scripts/ingest.py "
@@ -247,12 +251,22 @@ def load_query_engine() -> BaseQueryEngine:
     _configure_llama_index()
 
     if not settings.chroma_persist_dir.exists():
-        raise FileNotFoundError(
+        raise IndexUnavailableError(
             f"No index found at {settings.chroma_persist_dir}. Run scripts/ingest.py first."
         )
 
     chroma_client = chromadb.PersistentClient(path=str(settings.chroma_persist_dir))
     chroma_collection = chroma_client.get_or_create_collection(settings.chroma_collection)
+
+    # Directory existence is not readiness. `storage/chroma` is committed as a .gitkeep
+    # placeholder and get_or_create_collection happily creates an empty collection, so
+    # the old check passed on a fresh clone and every question then retrieved nothing.
+    if chroma_collection.count() == 0:
+        raise IndexUnavailableError(
+            f"Chroma collection '{settings.chroma_collection}' at "
+            f"{settings.chroma_persist_dir} is empty. Run scripts/ingest.py first."
+        )
+
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
 
     index = VectorStoreIndex.from_vector_store(vector_store)
