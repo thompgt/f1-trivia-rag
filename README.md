@@ -2,6 +2,8 @@
 
 A retrieval-augmented chatbot that answers Formula 1 historical stats and trivia questions, grounded in Ergast race-result data and Wikipedia race reports, with citations back to the source document.
 
+[![CI](https://github.com/thompgt/f1-trivia-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/thompgt/f1-trivia-rag/actions/workflows/ci.yml)
+
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![LlamaIndex](https://img.shields.io/badge/LlamaIndex-1B1B1D?style=for-the-badge)
@@ -300,6 +302,12 @@ ruff check .
 Tests that hit the Gemini API are marked `live`. They also skip automatically when
 `GEMINI_API_KEY` is unset, so a bare `pytest` on a machine without a key still passes — but
 prefer `-m "not live"` when you mean "don't spend money".
+
+The offline suite covers the retrieval logic that matters most: which seasons a question scopes
+to, the metadata filter's key/value/type, the `top_k` derived from the store, the collection
+reset, and the abstention guard — all with stub indexes, so `SeasonAwareRetriever` is verified
+without an API key. GitHub Actions (`.github/workflows/ci.yml`) installs `requirements.lock` and
+runs `ruff check .` plus `pytest -m "not live"` on Python 3.11 and 3.13.
 
 ### Notebook
 

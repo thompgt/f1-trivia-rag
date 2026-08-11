@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Read-only by default: nothing here publishes, comments, or pushes.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: lint + offline tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The bounds of the supported range in pyproject (requires-python = ">=3.11").
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: astral-sh/setup-uv@v5
+
+      # Installs the committed lock rather than re-resolving, so a new release of a
+      # transitive dependency cannot turn this red without a commit.
+      - name: Install locked dependencies
+        run: |
+          uv pip install --system -r requirements.lock
+          uv pip install --system -e . --no-deps
+
+      - name: Lint
+        run: ruff check .
+
+      # `live`-marked tests call the real Gemini API. CI has no key, so they would skip
+      # anyway - excluding them by marker makes that a decision rather than an accident,
+      # and keeps a missing key from turning into a silently empty test run.
+      - name: Offline tests
+        run: pytest -m "not live" -v
