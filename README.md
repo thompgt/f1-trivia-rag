@@ -104,6 +104,7 @@ src/f1_trivia_rag/
     ergast.py               Season schedule + per-round race results -> RawDocument
     wikipedia_source.py     Race-report prose -> RawDocument
     fastf1_source.py        Session summaries / fastest laps -> RawDocument (2018+, cached)
+    pipeline.py             Assembles the corpus for a set of seasons across sources
   rag/
     build_index.py          RawDocument -> LlamaIndex Document -> embedded, persisted Chroma index
     query_engine.py         Loads the persisted index; SeasonAwareRetriever + CitationQueryEngine
@@ -117,6 +118,7 @@ tests/
   test_config.py            Settings defaults
   test_ergast_ingestion.py  Ergast payload -> RawDocument transform (no network)
   test_ergast_client.py     Pagination, retry/backoff, and the on-disk cache (stubbed HTTP)
+  test_ingestion_pipeline.py Corpus assembly + --skip-wikipedia, all sources stubbed
   test_abstention.py        Empty-retrieval guard + grounding prompt contents (no network)
   test_build_index.py       Collection reset + document metadata promotion (no network)
   test_raw_document.py      The season-metadata-is-a-string invariant (no network)
@@ -166,9 +168,12 @@ Each race becomes one `RawDocument`: a header line
 (`P1: Max Verstappen (Red Bull) - Finished`), tagged with `source="ergast"`,
 `source_id="{season}-{round}-result"`, and metadata `{season, round, race_name}`.
 `wikipedia_source.py` and `fastf1_source.py` produce the same `RawDocument` shape for narrative
-race reports and session-level facts; they are importable modules, and Wikipedia ingestion is not
-yet wired into the CLI (the script prints a notice and skips it — the grand-prix names per season
-still have to be derived from the schedule).
+race reports and session-level facts. `ingestion/pipeline.py` assembles the corpus: Ergast results
+for each season, plus — unless `--skip-wikipedia` is passed — a Wikipedia race report per Grand
+Prix, with the page titles derived from the Ergast schedule (`raceName` is already the Wikipedia
+title fragment, so no hand-maintained list is needed). Reports that come back missing or ambiguous
+are counted and warned about rather than dropped silently. FastF1 is an importable module, not yet
+wired into the CLI.
 
 **2. Index.** `rag/build_index.py` converts each `RawDocument` into a LlamaIndex `Document`
 (`doc_id = "{source}:{source_id}"`, source fields promoted into metadata), configures Gemini
@@ -282,8 +287,13 @@ them from.
 python scripts/ingest.py --seasons 2018 2019 2020 2021 2022 2023
 ```
 
-Add `--skip-wikipedia` to state explicitly that only Ergast results are wanted. (Wikipedia
-ingestion is skipped either way until per-season grand-prix names are wired up.)
+By default this also fetches a Wikipedia race report per Grand Prix, deriving the titles from the
+Ergast schedule it already fetched. That is a page request per race, so it is much slower:
+
+```bash
+python scripts/ingest.py --seasons 2023 --skip-wikipedia   # Ergast results only
+python scripts/ingest.py --seasons 2023 --refresh          # ignore the on-disk cache
+```
 
 ### Serve and query
 
