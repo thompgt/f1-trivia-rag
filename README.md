@@ -41,7 +41,9 @@ keep it fixed.
   season instead of a similarity-ranked slice.
 - **Citation-grounded generation** — `CitationQueryEngine` re-chunks retrieved nodes into
   citation-sized spans (512-token chunks, 20-token overlap) and the API surfaces the `source` /
-  `source_id` metadata of every supporting node in the response.
+  `source_id` metadata of every supporting node in the response. Custom QA/refine prompts forbid
+  answering from prior knowledge, and an empty retrieval short-circuits to an explicit refusal
+  before the LLM is ever called.
 - **Metadata modelling for retrieval** — a source-agnostic `RawDocument` dataclass carrying
   `source`, `source_id`, and per-source metadata (season, round, race name), which is what makes
   both filtering and citation possible.
@@ -110,6 +112,7 @@ notebooks/
 tests/
   test_config.py            Settings defaults
   test_ergast_ingestion.py  Ergast payload -> RawDocument transform (no network)
+  test_abstention.py        Empty-retrieval guard + grounding prompt contents (no network)
   test_build_index.py       Collection reset + document metadata promotion (no network)
   test_raw_document.py      The season-metadata-is-a-string invariant (no network)
   test_season_aware_retriever.py  Stub-index tests: filter key/value/type and top_k (no network)
@@ -179,12 +182,23 @@ answer to every count question. Ingest is therefore destructive — whatever you
 - **No season named** → plain similarity retrieval with `similarity_top_k=5`, which is the right
   behavior for single-fact lookups.
 
-**4. Generate.** The retrieved nodes are handed to LlamaIndex's `CitationQueryEngine`, which
-splits them into numbered citation chunks (512 tokens, 20-token overlap) and prompts
-`gemini-2.5-flash` to answer using those numbered sources. The FastAPI `/chat` handler returns the
-generated answer plus a `Citation` per supporting node, carrying the `source` and `source_id` of
-the document it came from — so every answer points back at the Ergast result or Wikipedia report
-that backs it.
+**4. Generate.** The retrieved nodes are handed to a `CitationQueryEngine`, which splits them
+into numbered citation chunks (512 tokens, 20-token overlap) and prompts `gemini-2.5-flash` to
+answer using those numbered sources. The FastAPI `/chat` handler returns the generated answer
+plus a `Citation` per supporting node, carrying the `source` and `source_id` of the document it
+came from — so every answer points back at the Ergast result or Wikipedia report that backs it.
+
+Two things make that grounding real rather than nominal:
+
+- **Custom QA/refine prompts.** LlamaIndex's stock citation prompt only suggests abstention
+  ("if none of the sources are helpful, you should indicate that"), which leaves the model free
+  to answer an out-of-corpus question from memory and hang a citation off an unrelated retrieved
+  race. `F1_CITATION_QA_TEMPLATE` forbids prior knowledge outright, requires a source number per
+  claim, and tells the model to decline and cite nothing when the sources don't answer — while
+  explicitly keeping "zero" a legal answer, so season aggregates don't collapse into refusals.
+- **An empty-retrieval guard.** A question about a season that was never ingested filters to zero
+  nodes; `AbstainingCitationQueryEngine` returns a fixed explanation naming the remedy, instead of
+  the literal string `"Empty Response"` that LlamaIndex would otherwise serve as a 200.
 
 ## How to run
 
