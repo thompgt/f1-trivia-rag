@@ -3,11 +3,20 @@ from chromadb.api import ClientAPI
 from chromadb.api.models.Collection import Collection
 from chromadb.errors import NotFoundError
 from llama_index.core import Document, Settings, StorageContext, VectorStoreIndex
+from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from f1_trivia_rag.config import settings
 from f1_trivia_rag.ingestion.common import RawDocument
+
+# Chunking is pinned rather than inherited from whatever LlamaIndex's default happens
+# to be in the installed version, because how documents split into nodes changes what
+# a season-scoped retrieval has to fetch to cover a whole year. One Ergast race result
+# fits comfortably inside one chunk; long Wikipedia reports split, and the retriever
+# sizes itself from the resulting node count rather than assuming one node per race.
+CHUNK_SIZE = 1024
+CHUNK_OVERLAP = 20
 
 
 def _configure_llama_index() -> None:
@@ -15,6 +24,7 @@ def _configure_llama_index() -> None:
         model_name=settings.gemini_embed_model,
         api_key=settings.gemini_api_key,
     )
+    Settings.node_parser = SentenceSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
 
 
 def to_llama_documents(raw_documents: list[RawDocument]) -> list[Document]:

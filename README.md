@@ -36,8 +36,9 @@ keep it fixed.
 - **Embeddings and vector search** — Gemini embeddings written into a persistent Chroma
   collection; index reloaded from the vector store rather than rebuilt per query.
 - **Retrieval engineering** — a custom `BaseRetriever` subclass that detects a season in the
-  query, applies a Chroma metadata filter on `season`, and raises `similarity_top_k` from 5 to 40
-  so aggregate/negation questions see the whole season instead of a similarity-ranked slice.
+  query, applies a Chroma metadata filter on `season`, and raises `similarity_top_k` from 5 to
+  however many nodes that season actually holds, so aggregate/negation questions see the whole
+  season instead of a similarity-ranked slice.
 - **Citation-grounded generation** — `CitationQueryEngine` re-chunks retrieved nodes into
   citation-sized spans (512-token chunks, 20-token overlap) and the API surfaces the `source` /
   `source_id` metadata of every supporting node in the response.
@@ -58,9 +59,9 @@ keep it fixed.
 - **Notebook-based experimentation** — `notebooks/rag_experiment.ipynb` runs one real season
   through ingest → index → query and inspects answers alongside their citations.
 
-Not present: no reranking stage, no offline eval harness or scored benchmark, and no
-custom chunking strategy at index time (ingested documents are one race per document; LlamaIndex's
-default node parsing applies).
+Not present: no reranking stage, and no offline eval harness or scored benchmark. Chunking is
+pinned (a `SentenceSplitter` at 1024/20 configured in `build_index.py`) rather than left to the
+library default, but it is not tuned per source.
 
 ## Architecture
 
@@ -109,6 +110,9 @@ notebooks/
 tests/
   test_config.py            Settings defaults
   test_ergast_ingestion.py  Ergast payload -> RawDocument transform (no network)
+  test_build_index.py       Collection reset + document metadata promotion (no network)
+  test_raw_document.py      The season-metadata-is-a-string invariant (no network)
+  test_season_aware_retriever.py  Stub-index tests: filter key/value/type and top_k (no network)
   test_e2e.py               Live index build, query engine, and /chat endpoint
   test_chatbot_scenarios.py 15 live scenario tests (aggregation, negation, refusal, citations)
 data/                       raw/ and processed/ ingestion output + FastF1 cache (gitignored)
@@ -126,7 +130,7 @@ flowchart LR
     D --> E[Gemini embedding<br/>models/gemini-embedding-001]
     E --> F[(Chroma<br/>storage/chroma)]
     Q[User question<br/>POST /chat] --> R{Season named<br/>in query?}
-    R -- yes --> S[Filter season == YYYY<br/>top_k = 40]
+    R -- yes --> S[Filter season == YYYY<br/>top_k = nodes stored for that season]
     R -- no --> T[Similarity only<br/>top_k = 5]
     S --> F
     T --> F
@@ -164,10 +168,14 @@ answer to every count question. Ingest is therefore destructive — whatever you
 (`VectorStoreIndex.from_vector_store`) — no re-embedding of the corpus. Retrieval goes through
 `SeasonAwareRetriever`, which regex-matches a four-digit season (1950–2099) in the question:
 
-- **Season named** → retrieve with a metadata filter `season == "YYYY"` and `similarity_top_k=40`,
-  comfortably above the ~24 rounds of any season, so the model sees *every* race of that year.
-  This is what makes counts, "which races did X *not* win", and other whole-season aggregates
-  correct.
+- **Season named** → retrieve with a metadata filter `season == "YYYY"` and a `similarity_top_k`
+  read from the store: the retriever counts how many nodes carry that season and asks for exactly
+  that many, so the model sees *every* node of that year. This is what makes counts, "which races
+  did X *not* win", and other whole-season aggregates correct. The top_k is derived rather than a
+  constant because nothing guarantees one node per race — long Wikipedia reports split into
+  several — and a fixed cap would silently truncate the season. `MAX_SEASON_TOP_K` (400) is only
+  a ceiling to bound context size; hitting it logs a warning that aggregates may undercount, as
+  does retrieving fewer nodes than the store holds.
 - **No season named** → plain similarity retrieval with `similarity_top_k=5`, which is the right
   behavior for single-fact lookups.
 
