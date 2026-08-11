@@ -4,7 +4,6 @@ FastF1 only has full timing data from ~2018 onward, and downloads are large, so 
 is meant to supplement (not replace) the Ergast results for recent seasons.
 """
 
-from pathlib import Path
 
 import fastf1
 

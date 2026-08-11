@@ -11,8 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from f1_trivia_rag.ingestion.ergast import fetch_season_results
 from f1_trivia_rag.ingestion.common import RawDocument
+from f1_trivia_rag.ingestion.ergast import fetch_season_results
 from f1_trivia_rag.rag.build_index import build_index
 
 

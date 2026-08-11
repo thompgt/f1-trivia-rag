@@ -1,5 +1,5 @@
 import chromadb
-from llama_index.core import Document, StorageContext, VectorStoreIndex, Settings
+from llama_index.core import Document, Settings, StorageContext, VectorStoreIndex
 from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 

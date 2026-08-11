@@ -22,9 +22,23 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.6",
     "ipykernel>=6.29",
     "jupyter>=1.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: hits the real Gemini API (needs GEMINI_API_KEY); excluded by CI and the pre-commit hook",
+]
+
+[tool.ruff]
+line-length = 110
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

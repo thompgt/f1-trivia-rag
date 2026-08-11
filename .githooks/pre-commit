@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Runs the full test suite (unit + live end-to-end) before allowing a commit.
+# Runs the offline test suite before allowing a commit.
+#
+# `live`-marked tests are excluded: they call the real Gemini API, so they cost
+# money, need network, and are non-deterministic - not something a commit should
+# depend on. Run them explicitly with `pytest -m live`.
+#
 # Installed via: git config core.hooksPath .githooks
 set -euo pipefail
 
@@ -14,10 +19,16 @@ if [ ! -x "$PYTHON_BIN" ]; then
     exit 1
 fi
 
-echo "pre-commit: running unit + end-to-end tests..."
-if ! "$PYTHON_BIN" -m pytest -q; then
+echo "pre-commit: running ruff..."
+if ! "$PYTHON_BIN" -m ruff check .; then
+    echo "pre-commit: lint failed - commit aborted." >&2
+    exit 1
+fi
+
+echo "pre-commit: running offline tests..."
+if ! "$PYTHON_BIN" -m pytest -q -m "not live"; then
     echo "pre-commit: tests failed - commit aborted." >&2
     exit 1
 fi
 
-echo "pre-commit: all tests passed."
+echo "pre-commit: all offline checks passed."

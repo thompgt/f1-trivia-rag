@@ -51,10 +51,10 @@ keep it fixed.
   query engine, `503` when no index has been built yet, health endpoint.
 - **Configuration management** — `pydantic-settings` with `.env` loading for API keys, model
   names, and storage paths.
-- **Testing an LLM system** — unit tests for pure transforms, plus live end-to-end tests that
-  build a real throwaway Chroma index per test (isolated temp dir + unique collection name) and
-  assert on answers, citations, and the season-aggregate regression. A `pre-commit` hook runs the
-  suite before every commit.
+- **Testing an LLM system** — unit tests for pure transforms, plus `live`-marked end-to-end tests
+  that build a real throwaway Chroma index per test (isolated temp dir + unique collection name)
+  and assert on answers, citations, and the season-aggregate regression. A `pre-commit` hook runs
+  ruff and the offline suite before every commit; the live tests are opt-in (`pytest -m live`).
 - **Notebook-based experimentation** — `notebooks/rag_experiment.ipynb` runs one real season
   through ingest → index → query and inspects answers alongside their citations.
 
@@ -108,6 +108,7 @@ tests/
   test_config.py            Settings defaults
   test_ergast_ingestion.py  Ergast payload -> RawDocument transform (no network)
   test_e2e.py               Live index build, query engine, and /chat endpoint
+  test_chatbot_scenarios.py 15 live scenario tests (aggregation, negation, refusal, citations)
 data/                       raw/ and processed/ ingestion output + FastF1 cache (gitignored)
 storage/chroma/             persisted Chroma collection (gitignored)
 ```
@@ -187,7 +188,7 @@ pip install -e ".[dev]"
 cp .env.example .env          # then fill in GEMINI_API_KEY
 ```
 
-Optionally enable the test-running pre-commit hook:
+Optionally enable the pre-commit hook (runs `ruff check` and the offline test suite):
 
 ```bash
 git config core.hooksPath .githooks
@@ -235,11 +236,15 @@ with a message pointing at `scripts/ingest.py`.
 ### Tests
 
 ```bash
-pytest
+pytest -m "not live"    # offline suite: pure transforms + retrieval logic, no network
+pytest -m live          # end-to-end: builds real indexes and calls Gemini (needs GEMINI_API_KEY)
+pytest                  # everything
+ruff check .
 ```
 
-Unit tests run offline. The end-to-end tests build a real index and call Gemini, so they are
-skipped automatically when `GEMINI_API_KEY` is unset.
+Tests that hit the Gemini API are marked `live`. They also skip automatically when
+`GEMINI_API_KEY` is unset, so a bare `pytest` on a machine without a key still passes — but
+prefer `-m "not live"` when you mean "don't spend money".
 
 ### Notebook
 
