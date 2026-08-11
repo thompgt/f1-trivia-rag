@@ -120,6 +120,7 @@ tests/
   test_ergast_ingestion.py  Ergast payload -> RawDocument transform (no network)
   test_ergast_client.py     Pagination, retry/backoff, and the on-disk cache (stubbed HTTP)
   test_ingestion_pipeline.py Corpus assembly + --skip-wikipedia, all sources stubbed
+  test_fastf1_source.py     FastF1 unavailable-vs-broken error handling (stubbed)
   test_abstention.py        Empty-retrieval guard + grounding prompt contents (no network)
   test_api.py               /chat status mapping and input bounds (stubbed engine)
   test_build_index.py       Collection reset + document metadata promotion (no network)
