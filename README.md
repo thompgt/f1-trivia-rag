@@ -79,7 +79,9 @@ default node parsing applies).
 
 - `RawDocument` (`ingestion/common.py`) — the ingestion contract: `text`, `source`
   (`"ergast"` / `"wikipedia"` / `"fastf1"`), `source_id`, and a free-form `metadata` dict. Every
-  source normalizes to this, independent of any index library.
+  source normalizes to this, independent of any index library. One key is not free-form:
+  `metadata["season"]` is coerced to `str` on construction, because Chroma matches metadata by
+  value *and* type, so a source storing `2023` would be invisible to a `season == "2023"` filter.
 - LlamaIndex `Document` (`rag/build_index.py`) — `doc_id` is `"{source}:{source_id}"`, and
   `source`/`source_id` are merged into node metadata so retrieval filters and citations both work.
 - `ChatRequest` / `ChatResponse` / `Citation` (`api/main.py`) — Pydantic request and response

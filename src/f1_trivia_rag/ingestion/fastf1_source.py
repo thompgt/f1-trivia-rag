@@ -45,5 +45,5 @@ def fetch_session_summary(season: int, grand_prix: str, session_type: str = "R")
         text="\n".join(lines),
         source="fastf1",
         source_id=f"{season}-{grand_prix}-{session_type}",
-        metadata={"season": season, "grand_prix": grand_prix, "session_type": session_type},
+        metadata={"season": str(season), "grand_prix": grand_prix, "session_type": session_type},
     )

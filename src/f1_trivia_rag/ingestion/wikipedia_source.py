@@ -19,7 +19,7 @@ def fetch_race_report(season: int, grand_prix: str) -> RawDocument | None:
         text=page.content,
         source="wikipedia",
         source_id=page.title,
-        metadata={"season": season, "grand_prix": grand_prix, "url": page.url},
+        metadata={"season": str(season), "grand_prix": grand_prix, "url": page.url},
     )
 
 
