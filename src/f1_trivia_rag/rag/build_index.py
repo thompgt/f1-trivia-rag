@@ -4,7 +4,7 @@ from chromadb.api.models.Collection import Collection
 from chromadb.errors import NotFoundError
 from llama_index.core import Document, Settings, StorageContext, VectorStoreIndex
 from llama_index.core.node_parser import SentenceSplitter
-from llama_index.embeddings.gemini import GeminiEmbedding
+from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from f1_trivia_rag.config import require_gemini_api_key, settings
@@ -21,7 +21,7 @@ CHUNK_OVERLAP = 20
 
 def _configure_llama_index() -> None:
     api_key = require_gemini_api_key()
-    Settings.embed_model = GeminiEmbedding(
+    Settings.embed_model = GoogleGenAIEmbedding(
         model_name=settings.gemini_embed_model,
         api_key=api_key,
     )

@@ -30,7 +30,8 @@ keep it fixed.
 ## Skills demonstrated
 
 - **Python 3.11+ packaging** — `src/` layout, `pyproject.toml` with setuptools, editable install,
-  `[dev]` optional dependency group.
+  `[dev]` optional dependency group, upper-bounded dependencies and a committed universal
+  lockfile that CI installs from.
 - **RAG pipeline construction with LlamaIndex** — document normalization, embedding, persistent
   vector indexing, and query-engine assembly.
 - **Embeddings and vector search** — Gemini embeddings written into a persistent Chroma
@@ -71,8 +72,8 @@ library default, but it is not tuned per source.
 
 | Component | Choice | Configured in |
 | --- | --- | --- |
-| Embedding model | `models/gemini-embedding-001` (Google Gemini, via `llama-index-embeddings-gemini`) | `gemini_embed_model` |
-| Generation model | `gemini-2.5-flash` (Google Gemini, via `llama-index-llms-gemini`) | `gemini_chat_model` |
+| Embedding model | `models/gemini-embedding-001` (Google Gemini, via `llama-index-embeddings-google-genai`) | `gemini_embed_model` |
+| Generation model | `gemini-2.5-flash` (Google Gemini, via `llama-index-llms-google-genai`) | `gemini_chat_model` |
 | Reranker | none | — |
 | Vector store | Chroma, `PersistentClient` on local disk | `chroma_persist_dir`, `chroma_collection` (default `f1_trivia`) |
 | Orchestration | LlamaIndex `VectorStoreIndex` + `CitationQueryEngine` | `src/f1_trivia_rag/rag/` |
@@ -223,8 +224,20 @@ Two things make that grounding real rather than nominal:
 ```bash
 python -m venv .venv
 source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -r requirements.lock   # exact versions CI runs against
+pip install -e . --no-deps
 cp .env.example .env          # then fill in GEMINI_API_KEY
+```
+
+`requirements.lock` is a universal (cross-platform, Python 3.11+) lock generated from
+`pyproject.toml`, and it is what CI installs — so the versions you develop against are the
+versions the tests passed on. To install from the declared ranges instead, or to refresh the lock
+after changing a dependency:
+
+```bash
+pip install -e ".[dev]"                     # resolve from pyproject ranges
+uv pip compile --universal --python-version 3.11 --extra dev \
+  -o requirements.lock pyproject.toml       # regenerate the lock
 ```
 
 Optionally enable the pre-commit hook (runs `ruff check` and the offline test suite):
