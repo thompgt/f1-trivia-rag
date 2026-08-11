@@ -12,6 +12,7 @@ from f1_trivia_rag.rag.query_engine import (
     DEFAULT_TOP_K,
     MAX_SEASON_TOP_K,
     SeasonAwareRetriever,
+    seasons_in_query,
 )
 
 
@@ -48,7 +49,9 @@ class StubCollection:
 
     def get(self, where, include):
         self.where_clauses.append(where)
-        count = self._season_counts.get(where["season"], 0)
+        clause = where["season"]
+        seasons = clause["$in"] if isinstance(clause, dict) else [clause]
+        count = sum(self._season_counts.get(season, 0) for season in seasons)
         return {"ids": [str(i) for i in range(count)]}
 
 
@@ -73,9 +76,9 @@ def test_season_in_query_applies_a_season_filter():
     (call,) = index.calls
     (metadata_filter,) = call["filters"].filters
     assert metadata_filter.key == "season"
-    assert metadata_filter.value == "2023"
-    assert isinstance(metadata_filter.value, str), "Chroma matches metadata by type too"
-    assert metadata_filter.operator.value == "=="
+    assert metadata_filter.value == ["2023"]
+    assert all(isinstance(v, str) for v in metadata_filter.value), "Chroma matches type too"
+    assert metadata_filter.operator.value == "in"
 
 
 def test_top_k_is_sized_from_the_stored_node_count():
@@ -136,3 +139,55 @@ def test_season_detection(question, expected):
         assert collection.where_clauses == []
     else:
         assert collection.where_clauses == [{"season": expected}]
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        # A single season is still a single season.
+        ("How many races did Red Bull win in 2023?", ["2023"]),
+        # Regression: the first-match-wins regex answered only half of this.
+        ("Compare 2021 and 2022", ["2021", "2022"]),
+        ("Who won more races, Hamilton in 2018 or Verstappen in 2023?", ["2018", "2023"]),
+        # Closed ranges expand.
+        ("Who won the title between 2010 and 2013?", ["2010", "2011", "2012", "2013"]),
+        ("Race wins from 2019 to 2021", ["2019", "2020", "2021"]),
+        ("Champions 2005-2007", ["2005", "2006", "2007"]),
+        # A bare "and" lists seasons, it does not span them.
+        ("Who won in 2015 and 2023?", ["2015", "2023"]),
+        # Open-ended scopes cannot be a set filter - better unfiltered than wrong.
+        ("Who has the most wins since 2000?", []),
+        ("Most poles before 1990?", []),
+        ("Who has the most wins ever?", []),
+        # No season at all.
+        ("Who won at Monaco?", []),
+    ],
+)
+def test_seasons_in_query(question, expected):
+    assert seasons_in_query(question) == expected
+
+
+def test_multi_season_query_filters_on_every_season():
+    index = StubIndex()
+    collection = StubCollection({"2021": 22, "2022": 22})
+    _retrieve(index, collection, "Compare Red Bull in 2021 and 2022")
+
+    (call,) = index.calls
+    (metadata_filter,) = call["filters"].filters
+    assert metadata_filter.value == ["2021", "2022"]
+    assert metadata_filter.operator.value == "in"
+    # top_k has to cover both seasons, not one of them.
+    assert call["similarity_top_k"] == 44
+    assert collection.where_clauses == [{"season": {"$in": ["2021", "2022"]}}]
+
+
+def test_open_ended_range_does_not_narrow_to_the_named_season():
+    """Regression: "most wins since 2000" filtered to the 2000 season alone."""
+    index = StubIndex()
+    collection = StubCollection({"2000": 17})
+    _retrieve(index, collection, "Which driver has the most wins since 2000?")
+
+    (call,) = index.calls
+    assert "filters" not in call
+    assert call["similarity_top_k"] == DEFAULT_TOP_K
+    assert collection.where_clauses == []

@@ -35,10 +35,10 @@ keep it fixed.
   vector indexing, and query-engine assembly.
 - **Embeddings and vector search** — Gemini embeddings written into a persistent Chroma
   collection; index reloaded from the vector store rather than rebuilt per query.
-- **Retrieval engineering** — a custom `BaseRetriever` subclass that detects a season in the
-  query, applies a Chroma metadata filter on `season`, and raises `similarity_top_k` from 5 to
-  however many nodes that season actually holds, so aggregate/negation questions see the whole
-  season instead of a similarity-ranked slice.
+- **Retrieval engineering** — a custom `BaseRetriever` subclass that works out which seasons a
+  question is scoped to (including multi-season and range phrasings), applies a Chroma `IN` filter
+  on `season`, and raises `similarity_top_k` from 5 to however many nodes those seasons actually
+  hold, so aggregate/negation questions see the whole season instead of a similarity-ranked slice.
 - **Citation-grounded generation** — `CitationQueryEngine` re-chunks retrieved nodes into
   citation-sized spans (512-token chunks, 20-token overlap) and the API surfaces the `source` /
   `source_id` metadata of every supporting node in the response. Custom QA/refine prompts forbid
@@ -132,9 +132,9 @@ flowchart LR
     N --> D[build_index.py<br/>LlamaIndex Document]
     D --> E[Gemini embedding<br/>models/gemini-embedding-001]
     E --> F[(Chroma<br/>storage/chroma)]
-    Q[User question<br/>POST /chat] --> R{Season named<br/>in query?}
-    R -- yes --> S[Filter season == YYYY<br/>top_k = nodes stored for that season]
-    R -- no --> T[Similarity only<br/>top_k = 5]
+    Q[User question<br/>POST /chat] --> R{Seasons in scope?}
+    R -- yes --> S[Filter season IN YYYY...<br/>top_k = nodes stored for those seasons]
+    R -- no / open-ended --> T[Similarity only<br/>top_k = 5]
     S --> F
     T --> F
     F --> U[CitationQueryEngine<br/>gemini-2.5-flash]
@@ -169,9 +169,19 @@ answer to every count question. Ingest is therefore destructive — whatever you
 
 **3. Retrieve.** `rag/query_engine.py` reloads the index from the existing Chroma collection
 (`VectorStoreIndex.from_vector_store`) — no re-embedding of the corpus. Retrieval goes through
-`SeasonAwareRetriever`, which regex-matches a four-digit season (1950–2099) in the question:
+`SeasonAwareRetriever`, which works out which seasons a question is scoped to (`seasons_in_query`,
+matching four-digit seasons 1950–2099):
 
-- **Season named** → retrieve with a metadata filter `season == "YYYY"` and a `similarity_top_k`
+- *Every* season named is kept, not just the first — "compare 2021 and 2022" filters on both.
+- Closed ranges are expanded: "between 2010 and 2013", "from 2019 to 2021", "2005-2007". A bare
+  "and" lists seasons rather than spanning them, so "2015 and 2023" is two seasons, not nine.
+- Open-ended scopes ("since 2000", "before 1990", "most wins ever") cannot be expressed as a set
+  membership filter, so they fall back to unfiltered similarity instead of silently narrowing to
+  the one year that happens to be written down.
+
+Then:
+
+- **Seasons in scope** → retrieve with a metadata filter `season IN [...]` and a `similarity_top_k`
   read from the store: the retriever counts how many nodes carry that season and asks for exactly
   that many, so the model sees *every* node of that year. This is what makes counts, "which races
   did X *not* win", and other whole-season aggregates correct. The top_k is derived rather than a
@@ -179,8 +189,8 @@ answer to every count question. Ingest is therefore destructive — whatever you
   several — and a fixed cap would silently truncate the season. `MAX_SEASON_TOP_K` (400) is only
   a ceiling to bound context size; hitting it logs a warning that aggregates may undercount, as
   does retrieving fewer nodes than the store holds.
-- **No season named** → plain similarity retrieval with `similarity_top_k=5`, which is the right
-  behavior for single-fact lookups.
+- **No season in scope** → plain similarity retrieval with `similarity_top_k=5`, which is the
+  right behavior for single-fact lookups.
 
 **4. Generate.** The retrieved nodes are handed to a `CitationQueryEngine`, which splits them
 into numbered citation chunks (512 tokens, 20-token overlap) and prompts `gemini-2.5-flash` to

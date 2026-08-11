@@ -31,7 +31,24 @@ DEFAULT_TOP_K = 5
 # cannot pull an unbounded number of nodes into one LLM context.
 MAX_SEASON_TOP_K = 400
 
-SEASON_PATTERN = re.compile(r"\b(19[5-9]\d|20\d{2})\b")
+_YEAR = r"(19[5-9]\d|20\d{2})"
+SEASON_PATTERN = re.compile(rf"\b{_YEAR}\b")
+
+# Closed ranges: "from 2010 to 2015", "2010-2015", "2010 through 2015", and - only
+# when introduced by "between" - "between 2010 and 2015". A bare "and" is deliberately
+# not a range separator: "who won in 2015 and 2023" names two seasons, not nine.
+SEASON_SPAN_PATTERN = re.compile(
+    rf"\b{_YEAR}\s*(?:-|–|—|to|through|until|(?P<and>and))\s*{_YEAR}\b", re.IGNORECASE
+)
+_BETWEEN_PREFIX = re.compile(r"\bbetween\s+$", re.IGNORECASE)
+
+# Phrasings whose scope has no upper or lower bound. A metadata filter is a set
+# membership test, so it cannot express them; filtering on the one year that happens
+# to be written down would answer a different question than the one asked, which is
+# how "most wins since 2000" used to become "most wins in the 2000 season".
+OPEN_RANGE_PATTERN = re.compile(
+    r"\b(since|after|before|prior to|up to|all[- ]time|ever|in history)\b", re.IGNORECASE
+)
 
 # Returned without calling the LLM when retrieval finds nothing - typically a question
 # about a season that was never ingested. LlamaIndex's own empty-node path returns the
@@ -63,7 +80,8 @@ _EXAMPLE = (
     "Source 2:\n"
     "Azerbaijan Grand Prix (2021). P1: Sergio Perez (Red Bull) - Finished\n"
     "Query: How many races did Red Bull win?\n"
-    "Answer: Two - Monaco [1] and Azerbaijan [2].\n"
+    "Answer: 2 - Monaco [1] and Azerbaijan [2].\n"
+    "(Counts are written as digits, so a caller can parse them.)\n"
 )
 
 # The stock CitationQueryEngine prompt only mildly suggests abstention ("if none of the
@@ -94,6 +112,37 @@ F1_CITATION_REFINE_TEMPLATE = PromptTemplate(
     "Query: {query_str}\n"
     "Answer: "
 )
+
+
+def seasons_in_query(query: str) -> list[str]:
+    """Every season the query scopes itself to, ascending. Empty means "do not filter".
+
+    Matching only the first four-digit number broke two-season questions in both
+    directions: "compare 2021 and 2022" scoped retrieval to 2021 and answered half the
+    question with no sign the other half was missing, and "most wins since 2000"
+    narrowed a whole-history question to the single 2000 season. Closed ranges are
+    expanded; open-ended ones cannot be expressed as a set membership filter, so they
+    fall back to unfiltered similarity rather than answering the wrong question.
+    """
+    named = SEASON_PATTERN.findall(query)
+    if not named:
+        return []
+
+    if OPEN_RANGE_PATTERN.search(query):
+        logger.info(
+            "Query scopes an open-ended range (%s); retrieving without a season filter.",
+            query,
+        )
+        return []
+
+    seasons = set(named)
+    for match in SEASON_SPAN_PATTERN.finditer(query):
+        if match.group("and") and not _BETWEEN_PREFIX.search(query[: match.start()]):
+            continue
+        start, end = sorted((int(match.group(1)), int(match.group(3))))
+        seasons.update(str(year) for year in range(start, end + 1))
+
+    return sorted(seasons)
 
 
 def _configure_llama_index() -> None:
@@ -127,38 +176,40 @@ class SeasonAwareRetriever(BaseRetriever):
         self._collection = collection
         super().__init__()
 
-    def _season_node_count(self, season: str) -> int:
-        """How many nodes are stored under this season - the number a season-scoped
-        retrieval has to return to genuinely cover the whole year.
+    def _season_node_count(self, seasons: list[str]) -> int:
+        """How many nodes are stored under these seasons - the number a season-scoped
+        retrieval has to return to genuinely cover them.
         """
-        return len(self._collection.get(where={"season": season}, include=[])["ids"])
+        where = {"season": seasons[0]} if len(seasons) == 1 else {"season": {"$in": seasons}}
+        return len(self._collection.get(where=where, include=[])["ids"])
 
     def _retrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
-        match = SEASON_PATTERN.search(query_bundle.query_str)
-        if not match:
+        seasons = seasons_in_query(query_bundle.query_str)
+        if not seasons:
             return self._index.as_retriever(similarity_top_k=DEFAULT_TOP_K).retrieve(query_bundle)
 
-        season = match.group(0)
-        stored = self._season_node_count(season)
+        stored = self._season_node_count(seasons)
         top_k = min(max(stored, DEFAULT_TOP_K), MAX_SEASON_TOP_K)
         if stored > MAX_SEASON_TOP_K:
             logger.warning(
-                "Season %s holds %d nodes, above the %d ceiling; the answer will be based "
-                "on a subset and aggregates over this season may undercount.",
-                season,
+                "Seasons %s hold %d nodes, above the %d ceiling; the answer will be based "
+                "on a subset and aggregates over them may undercount.",
+                ", ".join(seasons),
                 stored,
                 MAX_SEASON_TOP_K,
             )
 
+        # IN rather than == so "compare 2021 and 2022" keeps both years in scope. With a
+        # single season IN is equivalent to ==, so there is no separate code path.
         filters = MetadataFilters(
-            filters=[MetadataFilter(key="season", value=season, operator=FilterOperator.EQ)]
+            filters=[MetadataFilter(key="season", value=seasons, operator=FilterOperator.IN)]
         )
         nodes = self._index.as_retriever(similarity_top_k=top_k, filters=filters).retrieve(query_bundle)
 
         if len(nodes) < min(stored, MAX_SEASON_TOP_K):
             logger.warning(
-                "Season %s: retrieved %d of %d stored nodes; aggregates may undercount.",
-                season,
+                "Seasons %s: retrieved %d of %d stored nodes; aggregates may undercount.",
+                ", ".join(seasons),
                 len(nodes),
                 stored,
             )
