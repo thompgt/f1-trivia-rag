@@ -15,7 +15,7 @@ from llama_index.embeddings.gemini import GeminiEmbedding
 from llama_index.llms.gemini import Gemini
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
-from f1_trivia_rag.config import settings
+from f1_trivia_rag.config import require_gemini_api_key, settings
 
 logger = logging.getLogger(__name__)
 
@@ -146,11 +146,12 @@ def seasons_in_query(query: str) -> list[str]:
 
 
 def _configure_llama_index() -> None:
+    api_key = require_gemini_api_key()
     Settings.embed_model = GeminiEmbedding(
         model_name=settings.gemini_embed_model,
-        api_key=settings.gemini_api_key,
+        api_key=api_key,
     )
-    Settings.llm = Gemini(model_name=settings.gemini_chat_model, api_key=settings.gemini_api_key)
+    Settings.llm = Gemini(model_name=settings.gemini_chat_model, api_key=api_key)
 
 
 class SeasonAwareRetriever(BaseRetriever):

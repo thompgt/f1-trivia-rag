@@ -235,11 +235,14 @@ git config core.hooksPath .githooks
 
 ### Configuration
 
-Settings are read from `.env` (or real environment variables) by `pydantic-settings`:
+Settings are read by `pydantic-settings` from real environment variables or from `.env` **in the
+repository root** — the path is resolved against the project root, not the working directory, so
+`uvicorn`, `pytest` and `scripts/ingest.py` pick up the same config whatever directory you run
+them from.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | *(empty)* | Google Gemini API key. Required — live tests skip without it, and ingest/query fail without it. |
+| `GEMINI_API_KEY` | *(empty)* | Google Gemini API key. Required: ingest and query raise `MissingApiKeyError` immediately without it, rather than failing inside a Gemini call. Live tests skip without it. |
 | `GEMINI_EMBED_MODEL` | `models/gemini-embedding-001` | Embedding model |
 | `GEMINI_CHAT_MODEL` | `gemini-2.5-flash` | Generation model |
 | `CHROMA_PERSIST_DIR` | `<repo>/storage/chroma` | Chroma persistence directory |
