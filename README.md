@@ -389,3 +389,4 @@ jupyter lab notebooks/rag_experiment.ipynb
 ```
 
 Ingests the 2023 season, builds the index, and asks a few questions with their citations printed.
+Outputs are cleared in the committed copy — run it to regenerate them.
