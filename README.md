@@ -149,9 +149,14 @@ still have to be derived from the schedule).
 
 **2. Index.** `rag/build_index.py` converts each `RawDocument` into a LlamaIndex `Document`
 (`doc_id = "{source}:{source_id}"`, source fields promoted into metadata), configures Gemini
-embeddings globally, opens/creates the Chroma collection under `storage/chroma`, and builds a
-`VectorStoreIndex`, which embeds every node and persists it into Chroma. Because the store is
-persistent, this is a one-time cost per corpus rather than per query.
+embeddings globally, **drops and recreates** the Chroma collection under `storage/chroma`, and
+builds a `VectorStoreIndex`, which embeds every node and persists it into Chroma. Because the
+store is persistent, this is a one-time cost per corpus rather than per query.
+
+Indexing is a full rebuild, not an append: LlamaIndex mints fresh random node ids each run, so
+ingesting into an existing collection would insert a *second* copy of every race and double the
+answer to every count question. Ingest is therefore destructive — whatever you pass to
+`scripts/ingest.py` becomes the whole corpus.
 
 **3. Retrieve.** `rag/query_engine.py` reloads the index from the existing Chroma collection
 (`VectorStoreIndex.from_vector_store`) — no re-embedding of the corpus. Retrieval goes through
